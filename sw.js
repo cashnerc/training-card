@@ -1,5 +1,5 @@
 /* Training Card - offline cache */
-const CACHE = "training-card-v18";
+const CACHE = "training-card-v22";
 const CORE = [
   "./", "./index.html", "./manifest.webmanifest",
   "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png"

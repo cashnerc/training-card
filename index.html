@@ -190,6 +190,17 @@ a.chip.vid{display:block;text-align:center;background:var(--ink);color:var(--pla
   letter-spacing:.08em;text-transform:uppercase}
 .today-main span{color:var(--plate-yellow)}
 .today-sub{font-family:var(--mono);font-size:10.5px;color:#9AA0A6;margin-top:5px;line-height:1.5}
+.tgt.wu{color:var(--muted);margin-top:2px}
+.plan-sel{width:100%;margin:2px 0 8px;font-family:var(--disp);font-weight:600;font-size:15px;
+  padding:9px 10px;min-height:42px;border:1px solid var(--hair);border-radius:2px;
+  background:var(--plate-white);color:var(--ink)}
+.plan{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11.5px}
+.plan th{font-weight:600;text-align:right;color:var(--muted);padding:4px 3px;font-size:10px;letter-spacing:.04em}
+.plan th:first-child,.plan td:first-child{text-align:left}
+.plan td{text-align:right;padding:5px 4px;border-top:1px solid var(--hair);white-space:nowrap}
+.plan tr.past td{color:#A9AEB3}
+.plan td.now{background:var(--ink);color:var(--plate-white);font-weight:600}
+.plan td.blk{font-family:var(--disp);font-weight:600;font-size:12.5px;letter-spacing:.03em}
 /* how-to panels */
 .how-btn{
   appearance:none;cursor:pointer;background:var(--card-2);
@@ -494,29 +505,65 @@ function MIGRATE(s){
   if(s === "post") return "gp";
   return null;
 }
-const MAINS = { a1:1, b1:1, b2:1, b4:1 };
+const MAJORS = {
+  a1:{n:"Trap bar deadlift", c:"low", r:3},
+  b1:{n:"Leg press", c:"low", r:3},
+  b2:{n:"Hip thrust", c:"low", r:3},
+  b3:{n:"Lat pulldown", c:"up", r:2},
+  a2:{n:"Bulgarian split squat", c:"db", r:2},
+  a3:{n:"Chest-supported row", c:"db", r:2},
+  a4:{n:"Incline DB press (45\u00b0)", c:"db", r:2},
+  b4:{n:"High-incline DB press (60\u00b0)", c:"db", r:2},
+  c2:{n:"Reverse lunge", c:"db", r:2}
+};
+const TM_STEP = { low:10, up:5, db:5 };
+/* starting maxes entered 2026-11-04; fill any lift that has no training max yet */
+const DEFAULT_MAXES = { a1:300, b1:400, b2:200, b3:150, a2:90, a3:60, a4:75, b4:60, c2:90 };
+const DEFAULT_DATE = "2026-11-04";
+/* % of training max for weeks 1-4 of each wave (week 4 = unload) */
+const WAVES = {
+  gp:[0.75,0.775,0.80,0.70],   sp:[0.825,0.85,0.875,0.75], cv:[0.875,0.90,0.925,0.80],
+  is1:[0.80,0.825,0.85,0.725], dl:[0.65,0.65,0.65,0.65],  is2:[0.80,0.825,0.85,0.725]
+};
 function seasonNow(){
   const m = new Date().getMonth();
   for(const k in SEASONS){ if(SEASONS[k].months.indexOf(m) >= 0) return k; }
   return "gp";
 }
 function curSeason(){ return SEASONS[ST.season] ? ST.season : seasonNow(); }
-function setSeason(s){ ST.season = s; save(); render(); }
-const WAVE = [-0.05, -0.025, 0, -0.10];   /* 3 loading weeks + 1 unload */
-function blockWeek(){
-  const S = SEASONS[curSeason()];
-  const now = new Date();
-  let yr = now.getFullYear();
+/* A manual pick starts that block's week 1 on the Monday of the week it was picked.
+   Picking the block the calendar already shows keeps the calendar's week count. */
+function manualStart(s, now){
+  return dISO(s === seasonNow() ? blockStartFor(s, now)
+                                : addDays(dayStart(now), -((now.getDay() + 6) % 7)));
+}
+function fixSeasonStart(){
+  if(ST.season && !ST.seasonStart) ST.seasonStart = manualStart(ST.season, new Date());
+  if(!ST.season) ST.seasonStart = null;
+}
+function setSeason(s){
+  ST.season = s;
+  ST.seasonStart = s ? manualStart(s, new Date()) : null;
+  save(); render();
+}
+/* calendar: each block starts on the first Monday of its first month */
+function dayStart(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function addDays(d, n){ return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n); }
+function firstMonday(y, m){ const d = new Date(y, m, 1); return addDays(d, (8 - d.getDay()) % 7); }
+function daysBetween(a, b){ return Math.round((dayStart(b) - dayStart(a)) / 86400000); }
+function dISO(d){ return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
+function pd(s){ const p = String(s).split("-"); return new Date(+p[0], +p[1]-1, +p[2]); }
+function blockStartFor(k, now){
+  const S = SEASONS[k]; let yr = now.getFullYear();
   if(now.getMonth() < S.months[0]) yr--;
-  const start = new Date(yr, S.months[0], 1);
-  const wk = Math.floor((now - start) / 604800000) + 1;
-  return Math.max(1, wk);
+  return firstMonday(yr, S.months[0]);
 }
-function pctNow(){
-  const k = curSeason(), S = SEASONS[k];
-  if(k === "dl") return S.pct;
-  return Math.min(0.90, Math.max(0.50, S.pct + WAVE[(blockWeek()-1) % 4]));
+function blockWeek(){
+  const now = new Date();
+  const start = (ST.season && ST.seasonStart) ? pd(ST.seasonStart) : blockStartFor(curSeason(), now);
+  return Math.max(1, Math.floor(daysBetween(start, now) / 7) + 1);
 }
+function pctNow(){ return WAVES[curSeason()][(blockWeek()-1) % 4]; }
 function weekLabel(){
   const k = curSeason();
   if(k === "dl") return "wk " + blockWeek() + " \u00b7 deload";
@@ -529,7 +576,7 @@ function speedPW(){
 }
 const BJUMP = { id:"bj", n:"Box jump (SP block)", p:"3 \u00d7 3", rest:"Rest 90 s", sets:3, ball:1,
   c:"Strength-power block only. Same rules as Day A: land quiet, step down." };
-function round5(v){ return Math.max(5, Math.round(v/5)*5); }
+function round5(v){ return Math.max(5, Math.round(v/5 + 1e-9)*5); }
 function epley(w, r){ return r <= 1 ? w : w * (1 + r/30); }
 function parseMax(str){
   let m = String(str).trim().match(/^(\d+(?:\.\d+)?)\s*[x×]\s*(\d+)$/i);
@@ -538,40 +585,119 @@ function parseMax(str){
   if(m) return round5(+m[1]);
   return 0;
 }
-function setMax(id, btn){
+/* ------------------------------------------- training max (TM) model */
+/* TM steps at each full 4-week wave start in General prep (after wave 1)
+   and Strength-power. Conversion and in-season hold it. */
+function stepStarts(Y){
+  const gp = firstMonday(Y, 10), sp = firstMonday(Y+1, 0), cv = firstMonday(Y+1, 2), out = [];
+  for(let t = addDays(gp, 28); addDays(t, 28) <= sp; t = addDays(t, 28)) out.push(t);
+  for(let t = sp; addDays(t, 28) <= cv; t = addDays(t, 28)) out.push(t);
+  return out;
+}
+function countSteps(from, to){
+  let n = 0;
+  for(let Y = from.getFullYear() - 1; Y <= to.getFullYear(); Y++){
+    stepStarts(Y).forEach(ws => { if(ws > from && ws <= to) n++; });
+  }
+  return n;
+}
+function nextStep(now){
+  let best = null;
+  for(let Y = now.getFullYear() - 1; Y <= now.getFullYear() + 1; Y++){
+    stepStarts(Y).forEach(ws => { if(ws > now && (!best || ws < best)) best = ws; });
+  }
+  return best;
+}
+function effTM(id, at){
+  const t = ST.tm && ST.tm[id]; if(!t) return 0;
+  const m = MAJORS[id], n = countSteps(pd(t.date), at || new Date());
+  return t.base + (m.c === "db" ? Math.floor(n / 2) : n) * TM_STEP[m.c];
+}
+function setTM(id, btn){
   const inp = btn.parentNode.querySelector("input");
-  const v = parseMax(inp.value);
-  if(!v){ inp.value = ""; inp.placeholder = "245 or 205x5"; return; }
-  if(!ST.maxes) ST.maxes = {};
-  const prev = ST.maxes[id];
-  const hist = (prev && prev.hist) ? prev.hist : (prev ? [{e1:prev.e1, date:prev.date}] : []);
-  hist.push({ e1: v, date: today() });
-  ST.maxes[id] = { e1: v, date: today(), hist: hist.slice(-12) };
+  const e1 = parseMax(inp.value);
+  if(!e1){ inp.value = ""; inp.placeholder = "205x5 or 245"; return; }
+  if(!ST.tm) ST.tm = {};
+  const old = ST.tm[id], td = dISO(new Date());
+  const hist = (old && old.hist) ? old.hist.slice() : [];
+  hist.push({ e1: e1, d: td });
+  ST.tm[id] = { base: round5(e1 * 0.9), date: td, since: td, e1: e1, hist: hist.slice(-12), heavy: [] };
   save(); render();
 }
-function maxTrend(id){
-  const mx = ST.maxes && ST.maxes[id];
-  if(!mx || !mx.hist || mx.hist.length < 2) return "";
-  const first = mx.hist[0], d = mx.e1 - first.e1;
-  if(!d) return "";
-  const arrow = d > 0 ? "\u2191" : "\u2193";
-  return ` <b>${arrow}${d>0?"+":""}${d}</b> since ${first.date}`;
+function tmTrend(id){
+  const t = ST.tm && ST.tm[id];
+  if(!t || !t.hist || t.hist.length < 2) return "";
+  const d = t.e1 - t.hist[0].e1;
+  return d ? ` <b>${d > 0 ? "\u2191" + d : "\u2193" + (-d)}</b>` : "";
+}
+/* one tap within 28 days: hold the next step; a second: TM -10% */
+function tooHeavy(id, btn){
+  armed(btn, "heavy-" + id, () => {
+    const t = ST.tm && ST.tm[id]; if(!t) return;
+    const now = new Date(), cur = effTM(id, now);
+    t.heavy = t.heavy || [];
+    const recent = t.heavy.some(x => daysBetween(pd(x.d), now) < 28);
+    if(recent){
+      t.base = round5(cur * 0.9); t.date = dISO(now);
+      t.heavy.push({ d: dISO(now), t: "reset" });
+    } else {
+      const nx = nextStep(now);
+      t.base = cur; t.date = dISO(nx || now);
+      t.heavy.push({ d: dISO(now), t: "hold" });
+    }
+    t.heavy = t.heavy.slice(-4);
+    save(); render();
+  });
+}
+function heavyNote(id){
+  const t = ST.tm && ST.tm[id];
+  if(!t || !t.heavy || !t.heavy.length) return "";
+  const x = t.heavy[t.heavy.length - 1];
+  if(daysBetween(pd(x.d), new Date()) >= 28) return "";
+  return x.t === "reset" ? ` \u00b7 reset \u221210% ${x.d.slice(5)}` : ` \u00b7 next step held ${x.d.slice(5)}`;
+}
+function migrateMaxes(){
+  if(!ST.tm) ST.tm = {};
+  const mx = ST.maxes || {};
+  Object.keys(mx).forEach(id => {
+    if(!MAJORS[id] || ST.tm[id] || !mx[id] || !mx[id].e1) return;
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(mx[id].date || "") ? mx[id].date : dISO(new Date());
+    const hist = (mx[id].hist && mx[id].hist.length ? mx[id].hist : [{ e1: mx[id].e1, date: d }])
+      .map(x => ({ e1: x.e1, d: x.date || x.d || d }));
+    ST.tm[id] = { base: round5(mx[id].e1 * 0.9), date: d, since: d, e1: mx[id].e1, hist: hist.slice(-12), heavy: [] };
+  });
+}
+function seedDefaults(){
+  if(!ST.tm) ST.tm = {};
+  Object.keys(DEFAULT_MAXES).forEach(id => {
+    if(!MAJORS[id] || ST.tm[id]) return;
+    const e1 = DEFAULT_MAXES[id];
+    ST.tm[id] = { base: round5(e1 * 0.9), date: DEFAULT_DATE, since: DEFAULT_DATE, e1: e1,
+                  hist: [{ e1: e1, d: DEFAULT_DATE }], heavy: [] };
+  });
+}
+function setsOf(x){ return (MODE === "gym" && MAJORS[x.id]) ? SEASONS[curSeason()].sets : x.sets; }
+function rampHTML(id, w){
+  const plan = MAJORS[id].r === 3 ? [[0.45,5],[0.65,3],[0.85,2]] : [[0.5,8],[0.75,4]];
+  const seen = {}, out = [];
+  plan.forEach(([f, r]) => { const v = round5(w * f); if(v < w && !seen[v]){ seen[v] = 1; out.push(v + "\u00d7" + r); } });
+  return out.join(" \u00b7 ");
 }
 function px(x){
-  if(MODE === "gym" && MAINS[x.id]){
+  if(MODE === "gym" && MAJORS[x.id]){
     const S = SEASONS[curSeason()];
-    return S.sets + " × " + S.reps;
+    return S.sets + " \u00d7 " + S.reps;
   }
   return x.p;
 }
 function tgtHTML(x){
-  if(MODE !== "gym" || !MAINS[x.id]) return "";
-  const mx = ST.maxes && ST.maxes[x.id];
-  if(!mx) return `<div class="tgt">Target: set your max on the Daily tab</div>`;
-  const p = pctNow();
-  const w = round5(p * mx.e1);
-  const per = x.id === "b4" ? " per DB" : "";
-  return `<div class="tgt">Target: <b>${w} lb${per}</b> \u00b7 ${Math.round(p*100)}% of ${mx.e1} \u00b7 ${weekLabel()}</div>`;
+  if(MODE !== "gym" || !MAJORS[x.id]) return "";
+  if(!(ST.tm && ST.tm[x.id])) return `<div class="tgt">No training max yet \u2014 enter a working set on Daily \u2192 Training maxes</div>`;
+  const S = SEASONS[curSeason()], p = pctNow(), tm = effTM(x.id), w = round5(p * tm);
+  const per = MAJORS[x.id].c === "db" ? " per DB" : "";
+  const wu = rampHTML(x.id, w);
+  return `<div class="tgt">Today: <b>${w} lb${per} \u00d7 ${S.reps}</b> \u00b7 ${Math.round(p * 1000) / 10}% of TM ${tm} \u00b7 ${weekLabel()}${heavyNote(x.id)}</div>` +
+         (wu ? `<div class="tgt wu">Warm-up: ${wu}</div>` : ``);
 }
 function activeList(D){
   let base = D[MODE];
@@ -585,6 +711,7 @@ function seasonSelHTML(){
   let b = Object.keys(SEASONS).map(k =>
     `<button class="chip" aria-pressed="${k===cur}" onclick="setSeason('${k}')">${SEASONS[k].label}</button>`
   ).join("");
+  b = `<button class="chip" aria-pressed="${!ST.season}" onclick="setSeason(null)">Auto</button>` + b;
   return `<div class="eyebrow">Season focus</div><div class="seas">${b}</div>
           <div class="seas-note"><b>${esc(SEASONS[cur].name)}.</b> ${esc(SEASONS[cur].note)}
             ${speedPW() ? ` <span class="tag">SPEED ${speedPW()}\u00d7/WK</span>` : ``}</div>`;
@@ -729,21 +856,62 @@ function stairChipHTML(){
     </div></div>`;
 }
 
-const MAX_NAMES = { a1:"Trap bar deadlift", b1:"Leg press", b2:"Hip thrust", b4:"Incline DB press (per DB)" };
-function maxesHTML(){
-  let rows = Object.keys(MAX_NAMES).map(id => {
-    const mx = ST.maxes && ST.maxes[id];
+function tmHTML(){
+  const rows = Object.keys(MAJORS).map(id => {
+    const t = ST.tm && ST.tm[id], m = MAJORS[id];
     return `<div class="mx-line">
-      <div class="mx-name">${esc(MAX_NAMES[id])}</div>
-      <div class="mx-cur">${mx ? "e1RM " + mx.e1 + maxTrend(id) : "—"}</div>
-      <input class="inp" inputmode="decimal" placeholder="245 or 205x5">
-      <button class="chip" onclick="setMax('${id}', this)">Set</button>
+      <div class="mx-name">${esc(m.n)}</div>
+      <div class="mx-cur">${t ? "TM " + effTM(id) + tmTrend(id) : "\u2014"}</div>
+      <input class="inp" inputmode="decimal" placeholder="205x5">
+      <button class="chip" onclick="setTM('${id}', this)">Set</button>
     </div>`;
   }).join("");
-  return `<div class="eyebrow">Lift maxes</div>
+  return `<div class="eyebrow">Training maxes</div>
     <div class="card plain"><div class="list" style="padding-bottom:13px">
-    <div class="li-c" style="padding-top:6px">Enter an estimated one-rep max directly (245), or a hard set as weight×reps (205x5) and it computes one. Test with sets of 3-6 reps taken close to failure - never an actual single. Re-test each lift every 6-8 weeks. Other exercises: add weight when the last top set moved at the same speed and left no stiffness the next day.</div>
+    <div class="li-c" style="padding-top:6px">Enter a hard working set (205x5) or a known max (245). The training max (TM) is 90% of that estimate. It steps up automatically through the off-season and holds in-season. Dumbbell lifts are per dumbbell. Re-enter in each test week. Other exercises: add weight when the last top set moved at the same speed and left no stiffness the next day.</div>
     ${rows}</div></div>`;
+}
+let PLAN_ID = null;
+function planPick(v){ PLAN_ID = v; render(); }
+const PLAN_ORDER = [["gp",10,0],["sp",0,1],["cv",2,1],["is1",3,1],["dl",6,1],["is2",7,1]];
+function planHTML(){
+  const ids = Object.keys(MAJORS);
+  if(!PLAN_ID || !MAJORS[PLAN_ID]) PLAN_ID = ids.find(i => ST.tm && ST.tm[i]) || ids[0];
+  const id = PLAN_ID, m = MAJORS[id], t = ST.tm && ST.tm[id];
+  const sel = `<select class="plan-sel" onchange="planPick(this.value)">` +
+    ids.map(i => `<option value="${i}"${i === id ? " selected" : ""}>${esc(MAJORS[i].n)}</option>`).join("") + `</select>`;
+  const head = `<div class="eyebrow">Plan \u2014 training year</div>` + sel;
+  if(!t) return head + `<div class="seas-note">No training max for this lift yet. Enter a working set above and the year fills in.</div>`;
+  const now = new Date(), Y = now.getMonth() >= 10 ? now.getFullYear() : now.getFullYear() - 1;
+  const since = pd(t.since || t.date);
+  const bounds = PLAN_ORDER.map(([k, mo, off]) => [k, firstMonday(Y + off, mo)]).concat([["end", firstMonday(Y + 1, 10)]]);
+  let rows = "";
+  for(let b = 0; b < PLAN_ORDER.length; b++){
+    const k = bounds[b][0], S = SEASONS[k], bs = bounds[b][1];
+    const nwk = Math.round(daysBetween(bs, bounds[b + 1][1]) / 7);
+    for(let w0 = 0; w0 < nwk; w0 += 4){
+      let cells = "", past = true;
+      for(let j = 0; j < 4; j++){
+        const wi = w0 + j;
+        if(wi >= nwk){ cells += `<td></td>`; continue; }
+        const ws = addDays(bs, wi * 7), we = addDays(ws, 7);
+        if(we > now) past = false;
+        const val = we <= since ? "\u2014" : String(round5(WAVES[k][wi % 4] * effTM(id, ws)));
+        cells += `<td${ws <= now && now < we ? ' class="now"' : ''}>${val}</td>`;
+      }
+      const last = Math.min(w0 + 4, nwk);
+      const lab = (w0 + 1 === last) ? String(last) : (w0 + 1) + "\u2013" + last;
+      rows += `<tr${past ? ' class="past"' : ''}><td class="blk">${S.label} ${lab}</td><td>${S.sets}\u00d7${S.reps}</td>${cells}</tr>`;
+    }
+  }
+  const mar = firstMonday(Y + 1, 2), per = m.c === "db" ? " Per dumbbell." : "";
+  const note = now < mar
+    ? `TM now <b>${effTM(id)}</b> \u2192 <b>${effTM(id, mar)}</b> by March, then held through October.${per}`
+    : `TM <b>${effTM(id)}</b>, held through October. Steps resume in November.${per}`;
+  return head + `<div class="seas-note">${note}</div>
+    <div class="card plain" style="padding:8px 10px;overflow-x:auto">
+      <table class="plan"><tr><th>Block</th><th>Sets</th><th>W1</th><th>W2</th><th>W3</th><th>W4</th></tr>${rows}</table>
+    </div>`;
 }
 HOWTO.cd = "Any stair climber. Step fully onto each stair, stand tall, fingertips on the rails only - leaning on the rails deletes half the work. The pace prescription changes with the season button above.";
 
@@ -986,8 +1154,8 @@ const PACK = [
 
 /* ------------------------------------------------------------- state */
 let DAY = "A", MODE = "gym";
-let ST = { log:{}, active:{date:"",checks:{},weights:{}}, lastDay:"", mode:"gym", maxes:{}, season:null, speed:[], tests:[] };
-const today = () => new Date().toISOString().slice(0,10);
+let ST = { log:{}, active:{date:"",checks:{},weights:{}}, lastDay:"", mode:"gym", maxes:{}, tm:{}, season:null, seasonStart:null, speed:[], tests:[] };
+const today = () => dISO(new Date());   /* phone's local date, not UTC */
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
@@ -1002,6 +1170,9 @@ async function load(){
   }catch(e){ /* first run: key does not exist yet */ }
   if(ST.active.date !== today()) ST.active = {date:today(),checks:{},weights:{}};
   ST.season = MIGRATE(ST.season);
+  fixSeasonStart();
+  seedDefaults();
+  migrateMaxes();
   MODE = ST.mode === "travel" ? "travel" : "gym";
   if(NEXT[ST.lastDay]) DAY = NEXT[ST.lastDay];
   if(twoSess()){ DAY = (DAY === "1" || DAY === "2") ? DAY : "1"; }
@@ -1062,7 +1233,7 @@ function render(){
         The stretching at the end of each session is separate and specific to what you just trained.
         Both matter. Static holds go <b>after</b> lifting or after a round, never before —
         long holds beforehand blunt power output, which is the opposite of what a swing needs.</p></div>` +
-      seasonSelHTML() + stairChipHTML() + maxesHTML() + testsHTML() +
+      seasonSelHTML() + stairChipHTML() + tmHTML() + planHTML() + testsHTML() +
       `<div class="eyebrow">Mobility — daily, 10 minutes</div>` +
       `<div class="card">${listHTML(MOBILITY)}</div>` +
       `<div class="eyebrow">Golf</div>` +
@@ -1100,12 +1271,13 @@ function render(){
 
   list.forEach(x=>{
     const ch = ST.active.checks[x.id] || [];
-    const done = ch.length === x.sets && ch.every(Boolean);
+    const ns = setsOf(x);
+    const done = ch.length === ns && ch.every(Boolean);
 
     let setsHTML = `<div class="set-line"><div class="set-no">SETS</div><div class="tick-row">`;
-    for(let i=0;i<x.sets;i++){
+    for(let i=0;i<ns;i++){
       setsHTML += `<button class="tick" aria-pressed="${!!ch[i]}" aria-label="Set ${i+1} done"
-        onclick="tick('${x.id}',${i},${x.sets})">${i+1}</button>`;
+        onclick="tick('${x.id}',${i},${ns})">${i+1}</button>`;
     }
     setsHTML += `</div></div>`;
     /* removed: entry */
@@ -1127,6 +1299,7 @@ function render(){
            ${diaHTML(x.id, x.n)}
            ${HOWTO[x.id] ? `<div class="how on">${esc(HOWTO[x.id])}</div>` : ``}
            <div class="chips">
+             ${(MODE === "gym" && MAJORS[x.id] && ST.tm && ST.tm[x.id]) ? `<button class="chip" onclick="tooHeavy('${x.id}', this)">Too heavy</button>` : ``}
              ${(TIMES[x.id]||x.t) ? `<button class="chip" onclick="startTimer(${TIMES[x.id]||x.t},'${esc(x.n)}')">&#9654; Time ${fmtT(TIMES[x.id]||x.t)}</button>` : ``}
              ${restSecs(x.rest) ? `<button class="chip" onclick="startTimer(${restSecs(x.rest)},'Rest - ${esc(x.n)}')">&#9654; ${esc(x.rest)}</button>` : ``}
            </div>
@@ -1213,7 +1386,7 @@ function drawBar(){
   let done = 0;
   list.forEach(x=>{
     const ch = ST.active.checks[x.id] || [];
-    if(ch.length === x.sets && ch.every(Boolean)) done++;
+    if(ch.length === setsOf(x) && ch.every(Boolean)) done++;
   });
   let h = "";
   for(let i=0;i<total;i++){
@@ -1292,8 +1465,8 @@ function beep(){
 }
 
 function buildDump(){
-  return { v:5, log:ST.log, lastDay:ST.lastDay, maxes:ST.maxes||{},
-           season:ST.season, speed:ST.speed||[], tests:ST.tests||[] };
+  return { v:7, log:ST.log, lastDay:ST.lastDay, maxes:ST.maxes||{}, tm:ST.tm||{},
+           season:ST.season, seasonStart:ST.seasonStart||null, speed:ST.speed||[], tests:ST.tests||[] };
 }
 
 /* Destructive actions need a second tap - no accidental wipes. */
@@ -1356,9 +1529,12 @@ function applyDump(v){
   ST.log = v.log;
   if(v.lastDay) ST.lastDay = v.lastDay;
   if(v.maxes) ST.maxes = v.maxes;
-  if(v.season) ST.season = MIGRATE(v.season);
+  if(v.tm) ST.tm = v.tm;
+  else if(v.maxes){ ST.tm = {}; migrateMaxes(); }
+  if(v.season){ ST.season = MIGRATE(v.season); ST.seasonStart = v.seasonStart || null; fixSeasonStart(); }
   if(v.speed) ST.speed = v.speed;
   if(v.tests) ST.tests = v.tests;
+  seedDefaults();
   return true;
 }
 
