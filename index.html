@@ -262,6 +262,9 @@ a.chip.vid{display:block;text-align:center;background:var(--ink);color:var(--pla
   letter-spacing:.08em;text-transform:uppercase;padding:9px 13px;min-height:40px;
 }
 body.tmr-on{padding-bottom:130px}
+.tmr-row{gap:8px}
+.tmr-btn{padding:9px 10px;letter-spacing:.05em}
+.tmr.fin #tmr-restart{background:var(--plate-yellow);color:var(--ink);border-color:var(--plate-yellow)}
 
 .foot{text-align:center;font-family:var(--mono);font-size:10.5px;color:var(--muted);padding:22px 16px 8px;line-height:1.6}
 .reset{
@@ -403,7 +406,7 @@ const HOWTO = {
  a6:"One heavy dumbbell at your side like luggage. Walk tall for the distance, shoulders level, zero lean. Swap hands each length.",
  a7:"Arms locked on the posts, lean in, drive with short choppy steps. No sled at your gym: treadmill at 10-12% incline, brisk walk, hands off the rails.",
  b1:"Back and hips glued to the pads, feet mid-platform at hip width. Lower under control until just before the hips start to curl off the pad - that is your depth, wherever it lands. Drive through mid-foot; do not slam the knees into lockout. The one rule: the low back never peels off the pad.",
- b2:"Upper back on a bench, bar or dumbbell across the hips, feet flat with shins vertical at the top. Drive the hips up until the torso is level, chin tucked, 1-second squeeze. Do not arch past level.",
+ b2:"Sit on the floor with your upper back against a flat bench and a pad or folded mat on the bar at the hip crease; 45-lb plates let the bar roll over your legs. Feet flat with shins vertical at the top. Drive the hips up until the torso is level, chin tucked, 1-second squeeze. Do not arch past level.",
  b3:"Grip just outside the shoulders. Start from a full hang, pull the chest toward the bar with the elbows driving down and back. On the machine: pull to the collarbone, no leaning back for momentum.",
  b4:"Set the bench one notch below vertical - about 60 degrees. Dumbbells start at shoulder level, elbows about 45 degrees out from your sides. Press until the arms are straight, lower in 2-3 seconds. Ribs down: if the low back arches off the pad, the angle is too steep for today.",
  b5:"Curls: elbows pinned to your sides, up to the shoulders, 2 seconds down. Pushdowns: same posture, press to lockout. Do one set of each back to back, then rest.",
@@ -508,7 +511,7 @@ function MIGRATE(s){
 const MAJORS = {
   a1:{n:"Trap bar deadlift", c:"low", r:3},
   b1:{n:"Leg press", c:"low", r:3},
-  b2:{n:"Hip thrust", c:"low", r:3},
+  b2:{n:"Barbell hip thrust", c:"low", r:3},
   b3:{n:"Lat pulldown", c:"up", r:2},
   a2:{n:"Bulgarian split squat", c:"db", r:2},
   a3:{n:"Chest-supported row", c:"db", r:2},
@@ -983,8 +986,8 @@ const DAYS = {
        c:"Against a wall, standing. Throw it like you mean it, full reset between reps. No ball: explosive incline push-up."},
       {id:"b1",n:"Leg press",p:"3 × 6",rest:"Rest 2–3 min",sets:3,
        c:"Feet mid-platform, hip width. Depth stops where the hips stay glued to the pad — never let the low back peel off."},
-      {id:"b2",n:"Hip thrust",p:"3 × 8",rest:"Rest 2 min",sets:3,
-       c:"Chin tucked, ribs down. Squeeze at the top — don't hyperextend."},
+      {id:"b2",n:"Barbell hip thrust",p:"3 × 8",rest:"Rest 2 min",sets:3,
+       c:"Upper back on a bench, pad on the bar. Chin tucked, ribs down; squeeze at the top — don't hyperextend."},
       {id:"b3",n:"Pull-up or lat pulldown",p:"3 × 8",rest:"Rest 90 s",sets:3,
        c:"Full hang, dead stop at the bottom of every rep."},
       {id:"b4",n:"High-incline DB press",p:"3 × 8",rest:"Rest 90 s",sets:3,
@@ -1397,7 +1400,7 @@ function drawBar(){
   $("barCount").textContent = done + " / " + total;
 }
 /* ------------------------------------------------------------- timer */
-let TMR = { left:0, total:0, run:false, id:null };
+let TMR = { left:0, total:0, run:false, id:null, label:"" };
 
 function tmrEl(){
   let el = document.getElementById("tmr");
@@ -1409,6 +1412,7 @@ function tmrEl(){
     `<div class="tmr-row">
        <div class="tmr-label" id="tmr-label"></div>
        <div class="tmr-time" id="tmr-time">0:00</div>
+       <button class="tmr-btn" id="tmr-restart" onclick="tmrRestart()">Restart</button>
        <button class="tmr-btn" id="tmr-pause" onclick="tmrPause()">Pause</button>
        <button class="tmr-btn" onclick="tmrEnd()">End</button>
      </div>`;
@@ -1418,7 +1422,7 @@ function tmrEl(){
 function startTimer(sec,label){
   const el = tmrEl();
   clearInterval(TMR.id);
-  TMR = { left:sec, total:sec, run:true, id:setInterval(tmrTick,1000) };
+  TMR = { left:sec, total:sec, run:true, id:setInterval(tmrTick,1000), label:label };
   el.classList.add("on"); el.classList.remove("fin");
   document.body.classList.add("tmr-on");
   document.getElementById("tmr-label").textContent = label;
@@ -1442,6 +1446,7 @@ function tmrDraw(){
   const m = Math.floor(TMR.left/60), s = TMR.left % 60;
   document.getElementById("tmr-time").textContent = m + ":" + String(s).padStart(2,"0");
 }
+function tmrRestart(){ if(TMR.total) startTimer(TMR.total, TMR.label); }
 function tmrPause(){
   if(TMR.left <= 0) return;
   TMR.run = !TMR.run;
